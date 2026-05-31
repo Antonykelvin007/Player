@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Debi's Player</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#181818;
+  --panel:#1f1f1f;
+  --muted:#9aa0a6;
+  --accent:#6666ff;
+  --card-border:#333;
+  --danger:#e74c3c;
+  --glass: rgba(255,255,255,0.03);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+  background:var(--bg);
+  color:#eef0f6;
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  display:flex;
+  flex-direction:column;
+  min-height:100vh;
+}
+/* header */
+.header {
+  background: var(--panel);
+  padding:14px 20px;
+  position:relative;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.02) inset;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:20px;
+}
+.header-left {display:flex;flex-direction:column;}
+.title { font-size:20px; font-weight:700; text-align:left }
+.small-sub { font-size:12px; color:var(--muted); margin-top:6px }
+/* clock + next timer */
+.header-right { text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+#clock { border:2px solid var(--accent); padding:6px 10px; border-radius:8px; font-weight:600; color:var(--accent); background: rgba(102,102,255,0.03); min-width:94px; text-align:center; }
+#nextTimer { font-size:12px; color:var(--muted); }
+/* main layout */
+.container { display:flex; gap:18px; padding:18px; align-items:flex-start; width:100%; flex:1; }
+/* player column */
+.player-wrap{ flex:1 1 60%; min-width:320px; display:flex; flex-direction:column; border-radius:12px; background:var(--panel); border:1px solid var(--card-border); resize: both; overflow:hidden; position:relative; min-height:280px; box-shadow: 0 6px 24px rgba(0,0,0,0.45); }
+/* iframe will be resized by JS to match the container content area */
+.player-frame { width:100%; height:100%; border:0; background:#000; }
+/* overlay to protect clicks */
+.player-overlay { position:absolute; inset:0; z-index:20; background: transparent; }
+/* playlist column fixed ~50% */
+.playlist-wrap{
+  width:420px;
+  max-width:45%;
+  min-width:300px;
+  background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.00));
+  border-left:1px solid rgba(255,255,255,0.03);
+  padding:12px;
+  border-radius:8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+  height: calc(100vh - 140px);
+  display:flex;
+  flex-direction:column;
+}
+/* titles */
+.playlist-wrap h2{ margin:4px 0 12px 0; color:var(--accent); font-size:16px }
+/* actions */
+.actions { display:flex; gap:8px; margin-bottom:10px; flex-wrap:wrap }
+.btn { background:var(--accent); color:#fff; padding:8px 12px; border-radius:8px; border:0; cursor:pointer; font-weight:600; box-shadow: 0 6px 18px rgba(102,102,255,0.06); }
+.btn.ghost { background:transparent; border:1px solid rgba(255,255,255,0.03); color:var(--muted) }
+.btn.danger { background:var(--danger); color:#fff }
+/* scrollable playlist wrapper */
+.songListWrapper { flex:1; overflow-y:auto; overflow-x:hidden; }
+/* song card */
+.song-card { display:flex; align-items:center; gap:10px; background:var(--glass); padding:10px; border-radius:10px; margin-bottom:10px; border:1px solid rgba(255,255,255,0.02); transition: transform 220ms ease, background 220ms ease, box-shadow 220ms ease; }
+.song-card:hover { transform: translateY(-4px); background: rgba(255,255,255,0.02) }
+.song-card.active { box-shadow: 0 6px 18px rgba(102,102,255,0.08); border-left:4px solid var(--accent) }
+.dot { width:12px; height:12px; border-radius:50%; background:#ff5a5a; flex-shrink:0; transition: background 300ms ease; }
+.dot.ready { background:var(--accent); }
+.song-info { display:flex; align-items:center; gap:10px; flex:1; overflow:hidden; }
+/* truncate song title */
+.song-title { font-weight:600; font-size:14px; color:#eef0f6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.song-duration { font-size:12px; color:var(--muted) }
+/* small erase button */
+.erase-small { background:transparent; border:0; color:var(--danger); font-weight:700; padding:6px; border-radius:6px; cursor:pointer; }
+.erase-small:hover { background: rgba(231,76,60,0.06) }
+/* duration edit button - small */
+.dur-btn { background:transparent; border:1px solid rgba(255,255,255,0.04); color:var(--muted); padding:6px 8px; border-radius:6px; cursor:pointer; font-weight:600; }
+.dur-btn:hover { border-color: rgba(255,255,255,0.08); color:#fff }
+/* recycle list item */
+.recycle-item { display:flex; justify-content:space-between; gap:8px; padding:8px; border-radius:8px; background:rgba(255,255,255,0.01); margin-bottom:8px; align-items:center }
+/* floating nav bar */
+.nav-bar { display:flex; justify-content:center; gap:8px; margin-top:8px; }
+/* overlay & modals */
+.overlay{ position:fixed; inset:0; background:rgba(0,0,0,0.65); display:none; z-index:200 }
+.modal { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); background:var(--panel); padding:16px; border-radius:12px; z-index:300; min-width:320px; max-width:440px; border:2px solid rgba(102,102,255,0.12); display:none; }
+.modal h3{ margin:0 0 10px 0; color:var(--accent) }
+.modal .row{ display:flex; gap:8px; margin-bottom:8px }
+.modal input[type="text"], .modal input[type="number"], .modal input[type="password"]{ width:100%; padding:8px; border-radius:8px; border:1px solid rgba(255,255,255,0.03); background:#121212; color:#fff; }
+/* responsive */
+@media(max-width:1000px){ .playlist-wrap{ width:360px; max-width:40% } }
+@media(max-width:800px){
+  .container{ flex-direction:column; padding:12px }
+  .playlist-wrap{ width:100%; max-width:100%; height:auto; order:2 }
+  .player-wrap{ order:1; width:100%; max-width:100% }
+  .header{ padding-bottom:26px }
+}
+</style>
+</head>
+<body>
+<!-- HEADER -->
+<div class="header">
+  <div class="header-left">
+    <div class="title">Debi's Player</div>
+    <div class="small-sub">Created by Kelvin</div>
+  </div>
+  <div class="header-right">
+    <div id="clock">00:00:00</div>
+    <div id="nextTimer">Next song: -</div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="container">
+  <!-- PLAYER -->
+  <div class="player-wrap" id="playerWrap">
+    <iframe id="videoPlayer" class="player-frame" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+    <div class="player-overlay" id="playerOverlay"></div>
+  </div>
+
+  <!-- PLAYLIST -->
+  <div class="playlist-wrap" id="playlistWrap">
+    <h2>Playlist</h2>
+    <div class="actions">
+      <button class="btn" id="openAddBtn">Add Song</button>
+      <button class="btn ghost" id="openRecycleBtn">Recycle Bin</button>
+      <button class="btn ghost" id="openRestoreBtn">Restore</button>
+    </div>
+
+    <div class="songListWrapper">
+      <div id="songListContainer"></div>
+    </div>
+
+    <!-- floating nav bar -->
+    <div class="nav-bar">
+      <button class="btn" id="prevBtn">⏮ Prev</button>
+      <button class="btn" id="stopBtn">⏹ Stop</button>
+      <button class="btn" id="nextBtn">Next ⏭</button>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAYS & MODALS -->
+<div class="overlay" id="overlay"></div>
+
+<!-- Add Song Modal -->
+<div class="modal" id="addModal">
+<h3>Add Song</h3>
+<label>Title (optional)</label>
+<input type="text" id="addTitle" placeholder="Song title (optional)">
+<label>YouTube URL</label>
+<input type="text" id="addUrl" placeholder="https://www.youtube.com/watch?v=...">
+<div class="row">
+<input type="number" id="addMin" placeholder="Min" min="0" />
+<input type="number" id="addSec" placeholder="Sec" min="0" max="59" />
+</div>
+<div style="display:flex;gap:8px; justify-content:flex-end;">
+<button class="btn" id="confirmAdd">Add</button>
+<button class="btn ghost" id="cancelAdd">Cancel</button>
+</div>
+</div>
+
+<!-- Duration Modal -->
+<div class="modal" id="durModal">
+<h3>Set Duration (MM:SS)</h3>
+<div class="row">
+<input type="number" id="durMin" placeholder="Min" min="0" />
+<input type="number" id="durSec" placeholder="Sec" min="0" max="59" />
+</div>
+<div style="display:flex;gap:8px; justify-content:flex-end;">
+<button class="btn" id="confirmDur">Save</button>
+<button class="btn ghost" id="cancelDur">Cancel</button>
+</div>
+</div>
+
+<!-- Recycle Modal -->
+<div class="modal" id="recycleModal">
+<h3>Recycle Bin</h3>
+<div id="recycleList" style="max-height:300px; overflow:auto; padding:6px;"></div>
+<div style="display:flex;gap:8px; justify-content:flex-end; margin-top:8px;">
+<button class="btn" id="emptyRecycleBtn">Empty Recycle Bin</button>
+<button class="btn ghost" id="closeRecycleBtn">Close</button>
+</div>
+</div>
+
+<!-- Restore Modal -->
+<div class="modal" id="restoreModal">
+<h3>Restore (clears storage)</h3>
+<label>Enter password</label>
+<input type="password" id="restorePwd" placeholder="Password" />
+<div style="display:flex;gap:8px; justify-content:flex-end; margin-top:8px;">
+<button class="btn" id="confirmRestore">Confirm</button>
+<button class="btn ghost" id="cancelRestore">Cancel</button>
+</div>
+</div>
+
+<script>
+// ------------------------- STATE -------------------------
+const STORAGE_KEY='debi_playlist_v1';
+const RECYCLE_KEY='debi_recycle_v1';
+let playlist=[], recycleBin=[], activeIndex=-1, autoplayTimer=null, countdownInterval=null, remainingSeconds=null, editingId=null;
+
+// ELEMENTS
+const videoPlayer=document.getElementById('videoPlayer');
+const songListContainer=document.getElementById('songListContainer');
+const overlay=document.getElementById('overlay');
+const addModal=document.getElementById('addModal');
+const durModal=document.getElementById('durModal');
+const recycleModal=document.getElementById('recycleModal');
+const restoreModal=document.getElementById('restoreModal');
+const recycleListEl=document.getElementById('recycleList');
+const clockEl=document.getElementById('clock');
+const nextTimerEl=document.getElementById('nextTimer');
+
+// ------------------------- CLOCK -------------------------
+function updateClock(){ const now=new Date(); clockEl.textContent=now.toLocaleTimeString(); }
+setInterval(updateClock,1000); updateClock();
+
+// ------------------------- PERSISTENCE -------------------------
+function saveAll(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(playlist)); localStorage.setItem(RECYCLE_KEY, JSON.stringify(recycleBin)); }
+function loadAll(){ playlist = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); recycleBin = JSON.parse(localStorage.getItem(RECYCLE_KEY) || '[]'); }
+loadAll();
+
+// ------------------------- HELPERS -------------------------
+function uid(){ return 'id_'+Math.random().toString(36).slice(2,9); }
+function toEmbedUrl(url){ if(!url)return''; try{url=url.trim(); if(url.includes('youtube.com/watch?v=')){const v=new URL(url).searchParams.get('v'); return'https://www.youtube.com/embed/'+v;} if(url.includes('youtu.be/')){let v=url.split('youtu.be/')[1].split('?')[0]; return'https://www.youtube.com/embed/'+v;} if(url.includes('youtube.com/embed/'))return url.split('?')[0]; return url;}catch(e){return url;} }
+function formatMMSS(total){ total=Number(total)||0; const m=Math.floor(total/60); const s=total%60; return `${m}:${String(s).padStart(2,'0')}`; }
+
+// ------------------------- RENDER -------------------------
+function renderPlaylist(){
+  songListContainer.innerHTML='';
+  playlist.forEach((item, idx)=>{
+    const card=document.createElement('div'); card.className='song-card'; card.dataset.id=item.id;
+    const dot=document.createElement('div'); dot.className='dot';
+    const totalSec=(Number(item.min)||0)*60 + (Number(item.sec)||0); if(totalSec>0) dot.classList.add('ready');
+    const info=document.createElement('div'); info.className='song-info';
+    const title=document.createElement('div'); title.className='song-title'; title.textContent=item.title||item.url.split('/').pop();
+    const dur=document.createElement('div'); dur.className='song-duration'; dur.textContent=totalSec>0?formatMMSS(totalSec):'';
+    info.appendChild(dot); info.appendChild(title); info.appendChild(dur);
+    const right=document.createElement('div'); right.style.display='flex'; right.style.alignItems='center'; right.style.gap='8px';
+    if(totalSec<=0){const durBtn=document.createElement('button'); durBtn.className='dur-btn'; durBtn.textContent='Add duration'; durBtn.addEventListener('click',(e)=>{ e.stopPropagation(); openDurModal(item.id); }); right.appendChild(durBtn);}
+    const erase=document.createElement('button'); erase.className='erase-small'; erase.title='Delete'; erase.innerHTML='🗑'; erase.addEventListener('click',(e)=>{ e.stopPropagation(); if(confirm('Are you sure you want to delete this song?')){ recycleBin.push(item); playlist=playlist.filter(p=>p.id!==item.id); saveAll(); renderPlaylist(); renderRecycleList(); } });
+    right.appendChild(erase);
+    card.appendChild(info); card.appendChild(right);
+    card.addEventListener('click',()=>{ playIndex(idx); });
+    songListContainer.appendChild(card);
+  });
+}
+
+// ------------------------- PLAY -------------------------
+function playIndex(index){
+  if(index<0||index>=playlist.length)return;
+  activeIndex=index;
+  const item=playlist[index]; const embed=toEmbedUrl(item.url);
+  videoPlayer.src=embed+'?autoplay=1&mute=0';
+  document.querySelectorAll('.song-card').forEach(c=>c.classList.remove('active'));
+  const card=document.querySelector('.song-card[data-id="'+item.id+'"]'); if(card) card.classList.add('active');
+  if(autoplayTimer){ clearTimeout(autoplayTimer); autoplayTimer=null; }
+  if(countdownInterval){ clearInterval(countdownInterval); countdownInterval=null; }
+  const total=(Number(item.min)||0)*60 + (Number(item.sec)||0);
+  if(total>0){
+    remainingSeconds=total;
+    updateNextTimerDisplay();
+    countdownInterval=setInterval(()=>{ remainingSeconds--; if(remainingSeconds<=0){ clearInterval(countdownInterval); countdownInterval=null; remainingSeconds=null; updateNextTimerDisplay(); } else updateNextTimerDisplay(); },1000);
+    autoplayTimer=setTimeout(()=>{ if(index+1<playlist.length) playIndex(index+1); else { remainingSeconds=null; updateNextTimerDisplay(); } }, total*1000);
+  } else { remainingSeconds=null; updateNextTimerDisplay(); }
+}
+function updateNextTimerDisplay(){ if(remainingSeconds==null){ nextTimerEl.textContent='Next song: -'; } else{ const mm=Math.floor(remainingSeconds/60); const ss=remainingSeconds%60; nextTimerEl.textContent=`Next song: ${mm}:${String(ss).padStart(2,'0')}`; } }
+
+// ------------------------- ADD -------------------------
+document.getElementById('openAddBtn').addEventListener('click',()=>{ addModal.style.display='block'; overlay.style.display='block'; });
+document.getElementById('cancelAdd').addEventListener('click',()=>{ addModal.style.display='none'; overlay.style.display='none'; });
+document.getElementById('confirmAdd').addEventListener('click',()=>{
+  const title=document.getElementById('addTitle').value.trim();
+  const url=document.getElementById('addUrl').value.trim();
+  const min=Number(document.getElementById('addMin').value)||0;
+  const sec=Number(document.getElementById('addSec').value)||0;
+  if(!url){ alert('URL is required'); return; }
+  playlist.push({id:uid(),title,url,min,sec});
+  saveAll(); renderPlaylist(); addModal.style.display='none'; overlay.style.display='none';
+});
+
+// ------------------------- DURATION -------------------------
+function openDurModal(id){ editingId=id; durModal.style.display='block'; overlay.style.display='block'; const item=playlist.find(p=>p.id===id); document.getElementById('durMin').value=item.min||0; document.getElementById('durSec').value=item.sec||0; }
+document.getElementById('cancelDur').addEventListener('click',()=>{ durModal.style.display='none'; overlay.style.display='none'; editingId=null; });
+document.getElementById('confirmDur').addEventListener('click',()=>{
+  const min=Number(document.getElementById('durMin').value)||0;
+  const sec=Number(document.getElementById('durSec').value)||0;
+  const item=playlist.find(p=>p.id===editingId); if(item){ item.min=min; item.sec=sec; saveAll(); renderPlaylist(); } durModal.style.display='none'; overlay.style.display='none'; editingId=null;
+});
+
+// ------------------------- RECYCLE -------------------------
+function renderRecycleList(){ recycleListEl.innerHTML=''; recycleBin.forEach(item=>{ const div=document.createElement('div'); div.className='recycle-item'; div.textContent=item.title||item.url.split('/').pop(); const btn=document.createElement('button'); btn.className='btn'; btn.textContent='Restore'; btn.addEventListener('click',()=>{ playlist.push(item); recycleBin=recycleBin.filter(p=>p.id!==item.id); saveAll(); renderPlaylist(); renderRecycleList(); }); div.appendChild(btn); recycleListEl.appendChild(div); }); }
+document.getElementById('openRecycleBtn').addEventListener('click',()=>{ recycleModal.style.display='block'; overlay.style.display='block'; renderRecycleList(); });
+document.getElementById('closeRecycleBtn').addEventListener('click',()=>{ recycleModal.style.display='none'; overlay.style.display='none'; });
+document.getElementById('emptyRecycleBtn').addEventListener('click',()=>{ if(confirm('Empty recycle bin?')){ recycleBin=[]; saveAll(); renderRecycleList(); } });
+
+// ------------------------- RESTORE -------------------------
+document.getElementById('openRestoreBtn').addEventListener('click',()=>{ restoreModal.style.display='block'; overlay.style.display='block'; });
+document.getElementById('cancelRestore').addEventListener('click',()=>{ restoreModal.style.display='none'; overlay.style.display='none'; });
+document.getElementById('confirmRestore').addEventListener('click',()=>{
+  const pwd=document.getElementById('restorePwd').value.trim();
+  if(pwd==='1234'){ localStorage.clear(); playlist=[]; recycleBin=[]; activeIndex=-1; videoPlayer.src=''; renderPlaylist(); renderRecycleList(); restoreModal.style.display='none'; overlay.style.display='none'; alert('Restored'); } else{ alert('Wrong password'); }
+});
+
+// ------------------------- FLOATING NAV -------------------------
+document.getElementById('prevBtn').addEventListener('click',()=>{ if(activeIndex>0) playIndex(activeIndex-1); });
+document.getElementById('nextBtn').addEventListener('click',()=>{ if(activeIndex<playlist.length-1) playIndex(activeIndex+1); });
+document.getElementById('stopBtn').addEventListener('click',()=>{ videoPlayer.src=''; if(autoplayTimer){ clearTimeout(autoplayTimer); autoplayTimer=null; } if(countdownInterval){ clearInterval(countdownInterval); countdownInterval=null; } remainingSeconds=null; updateNextTimerDisplay(); document.querySelectorAll('.song-card').forEach(c=>c.classList.remove('active')); });
+
+// INITIAL RENDER
+renderPlaylist();
+</script>
+</body>
+</html>
